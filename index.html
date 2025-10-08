@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- This CSP is permissive for this example, but you should tighten it for production -->
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline'; font-src 'self';">
+    <title>prolog websocket</title>
+    <script src="assets/js/tailwind.js"></script>
+    <style>
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 400;
+            src: url('assets/fonts/inter-regular.woff2') format('woff2');
+        }
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 700;
+            src: url('assets/fonts/inter-bold.woff2') format('woff2');
+        }
+        body { font-family: 'Inter', sans-serif; }
+        /* Simple scrollbar styling for a more integrated look */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; } /* bg-gray-800 */
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; } /* bg-gray-600 */
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; } /* bg-gray-500 */
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 flex flex-col h-screen antialiased">
+
+    <header class="bg-gray-800/50 backdrop-blur-sm border-b border-gray-700 p-4 sticky top-0 z-10">
+        <h1 class="text-xl font-bold text-center text-white">Prolog websockets</h1>
+    </header>
+
+    <main class="flex-grow flex flex-col md:flex-row p-4 gap-4 overflow-hidden">
+        
+        <div class="flex flex-col md:w-1/2 bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700">
+            <div class="p-3 border-b border-gray-700 flex items-center justify-between">
+                <h2 class="font-semibold text-lg">Message Log</h2>
+                <div class="flex items-center gap-2">
+                    <span id="status-light" class="w-4 h-4 rounded-full bg-red-500 transition-colors duration-500"></span>
+                    <span id="status-text" class="font-medium text-gray-400">Disconnected</span>
+                </div>
+            </div>
+            <div id="message-log" class="flex-grow p-4 overflow-y-auto space-y-4">
+                <div class="text-gray-500 italic text-center p-4">Waiting for connection to ws://localhost:4000...</div>
+            </div>
+        </div>
+
+        <!-- JSON Composer -->
+        <div class="flex flex-col md:w-1/2 bg-gray-800 rounded-lg shadow-lg border border-gray-700">
+            <div class="p-3 border-b border-gray-700">
+                <h2 class="font-semibold text-lg">Compose JSON Message</h2>
+            </div>
+            <div class="flex-grow p-4 flex flex-col">
+                <textarea id="json-input" class="w-full flex-grow bg-gray-900 border border-gray-700 rounded-md p-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"></textarea>
+                <div id="error-message" class="text-red-400 text-xs mt-2 h-4"></div>
+                <button id="send-button" class="mt-2 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-lg transition-all duration-300 transform active:scale-95">
+                    Send JSON
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const statusLight = document.getElementById('status-light');
+            const statusText = document.getElementById('status-text');
+            const messageLog = document.getElementById('message-log');
+            const jsonInput = document.getElementById('json-input');
+            const sendButton = document.getElementById('send-button');
+            const errorMessage = document.getElementById('error-message');
+
+            const defaultJson = {
+                event: "greeting",
+                payload: {
+                    user: "electron-app",
+                    message: "Hello, WebSocket!",
+                    timestamp: new Date().toISOString()
+                }
+            };
+
+            // Pre-fill the textarea with a valid JSON example
+            jsonInput.value = JSON.stringify(defaultJson, null, 2);
+            
+            let socket;
+
+            function connect() {
+                socket = new WebSocket('ws://localhost:4000/ws');
+
+                socket.onopen = (event) => {
+                    updateStatus('Connected', 'bg-green-500', true);
+                    logMessage('system', 'ws://localhost:4000/ws');
+                    sendButton.disabled = false;
+                };
+
+                socket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        logMessage('received', data);
+                    } catch (e) {
+                        logMessage('error', 'Received non-JSON message: ' + event.data);
+                    }
+                };
+
+                socket.onerror = (error) => {
+                    logMessage('error', 'A WebSocket error occurred.');
+                };
+
+                socket.onclose = (event) => {
+                    updateStatus('Disconnected', 'bg-red-500', false);
+                    logMessage('system', `Connection closed. Retrying in 3 seconds...`);
+                    sendButton.disabled = true;
+                    setTimeout(connect, 3000); // Auto-reconnect
+                };
+            }
+
+            function updateStatus(text, colorClass, isConnected) {
+                statusText.textContent = text;
+                statusLight.className = `w-4 h-4 rounded-full transition-colors duration-500 ${colorClass}`;
+                 if(isConnected) {
+                    statusLight.classList.add('animate-pulse');
+                 } else {
+                    statusLight.classList.remove('animate-pulse');
+                 }
+            }
+
+            function logMessage(type, content) {
+                if (messageLog.querySelector('.italic')) {
+                    messageLog.innerHTML = ''; // Clear initial message
+                }
+                const messageWrapper = document.createElement('div');
+                const time = new Date().toLocaleTimeString();
+                
+                let header = '';
+                let bgColor = 'bg-gray-700';
+
+                if(type === 'sent') {
+                    header = `<div class="font-bold text-blue-400">SENT @ ${time}</div>`;
+                    bgColor = 'bg-blue-900/50';
+                } else if (type === 'received') {
+                    header = `<div class="font-bold text-green-400">RECEIVED @ ${time}</div>`;
+                    bgColor = 'bg-green-900/50';
+                } else if (type === 'system') {
+                    header = `<div class="font-bold text-yellow-400">SYSTEM @ ${time}</div>`;
+                    bgColor = 'bg-yellow-900/50';
+                    content = { message: content };
+                } else if (type === 'error') {
+                    header = `<div class="font-bold text-red-400">ERROR @ ${time}</div>`;
+                    bgColor = 'bg-red-900/50';
+                    content = { error: content };
+                }
+
+                const formattedContent = `<pre class="text-sm text-gray-200 whitespace-pre-wrap break-all">${JSON.stringify(content, null, 2)}</pre>`;
+                
+                messageWrapper.className = `p-3 rounded-lg ${bgColor} border border-gray-600/50`;
+                messageWrapper.innerHTML = header + formattedContent;
+
+                messageLog.appendChild(messageWrapper);
+                messageLog.scrollTop = messageLog.scrollHeight; // Auto-scroll
+            }
+
+            sendButton.addEventListener('click', () => {
+                const text = jsonInput.value;
+                errorMessage.textContent = '';
+                try {
+                    const json = JSON.parse(text); // Validate JSON
+                    socket.send(JSON.stringify(json));
+                    logMessage('sent', json);
+                } catch (e) {
+                    errorMessage.textContent = 'Invalid JSON: ' + e.message;
+                    logMessage('error', 'Attempted to send invalid JSON.');
+                }
+            });
+
+            // Initial connection attempt
+            connect();
+        });
+    </script>
+</body>
+</html>

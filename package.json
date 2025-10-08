@@ -1,0 +1,19 @@
+{
+  "name": "electron-websocket-app",
+  "version": "1.0.0",
+  "description": "An Electron app that connects to a local WebSocket server.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": [
+    "Electron",
+    "WebSocket"
+  ],
+  "author": "Tsuki",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.2.0"
+  }
+}
+
